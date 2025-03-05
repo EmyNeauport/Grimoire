@@ -4,6 +4,8 @@ const mongoose = require('mongoose');
 const bookRoutes = require('./routes/book');
 const userRoutes = require('./routes/user');
 
+const path = require('path');
+
 // appeler la constante express pour créer notre application express
 const app = express();
 mongoose.connect('mongodb+srv://neauportemilie:9sa4yJROcygENbUt@cluster0.kgs6a.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0',
@@ -24,6 +26,7 @@ app.use((req, res, next) => {
 
 app.use('/api/books', bookRoutes);
 app.use('/api/auth', userRoutes);
+app.use('/images', express.static(path.join(__dirname, 'images' )))
 
 // exporter l'application pour que l'on puisse y accéder depuis les autres fichiers de notre projet
 module.exports = app;

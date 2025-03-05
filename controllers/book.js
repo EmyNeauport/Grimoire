@@ -1,25 +1,43 @@
 const Book = require('../models/book');
 
 exports.createBook = (req, res, next) => {
-  let bookData;
-  try {
-    // Si le front-end envoie un champ "book" (chaîne JSON), on le parse
-    bookData = req.body.book ? JSON.parse(req.body.book) : req.body;
-  } catch (error) {
-    return res.status(400).json({ error: 'Mauvais format de données pour book' });
+  let bookObject = {};
+
+  // Si req.body.thing existe, on le parse, sinon on utilise req.body directement
+  if (req.body.book) {
+    try {
+      bookObject = JSON.parse(req.body.book);
+    } catch (error) {
+      return res.status(400).json({ error: 'Mauvais format de données pour "book"' });
+    }
+  } else {
+    bookObject = { ...req.body };
   }
 
-  // Crée le livre en assignant l'image uploadée (si présente)
+  // On vérifie que les champs obligatoires sont présents
+  const { title, author, year, genre } = bookObject;
+  if (!title || !author || !year || !genre) {
+    return res.status(400).json({ error: 'Champs manquants : title, author, year et genre sont requis.' });
+  }
+
+  // On définit des valeurs par défaut pour averageRating et ratings s'ils ne sont pas fournis
+  bookObject.averageRating = bookObject.averageRating !== undefined ? bookObject.averageRating : 0;
+  bookObject.ratings = bookObject.ratings || [];
+
+  // On crée le livre en utilisant le fichier uploadé pour l'image s'il existe
   const book = new Book({
-    ...bookData,
+    ...bookObject,
     userId: req.auth.userId,
-    imageUrl: req.file ? req.file.path : bookData.imageUrl, // Utilise le chemin du fichier ou conserve la valeur déjà fournie
+    imageUrl: req.file 
+      ? `${req.protocol}://${req.get('host')}/images/${req.file.filename}` 
+      : bookObject.imageUrl // ou une valeur par défaut si l'image est obligatoire
   });
 
   book.save()
     .then(() => res.status(201).json({ message: 'Objet enregistré' }))
-    .catch(error => res.status(500).json({ error }));
+    .catch(error => res.status(400).json({ error }));
 };
+
 
 exports.modifyBook = (req, res, next) => {
     // On récupère d'abord le livre
