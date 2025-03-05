@@ -1,4 +1,5 @@
 const Book = require('../models/book');
+const fs = require('fs');
 
 exports.createBook = (req, res, next) => {
   let bookObject = {};
@@ -40,39 +41,61 @@ exports.createBook = (req, res, next) => {
 
 
 exports.modifyBook = (req, res, next) => {
-    // On récupère d'abord le livre
-    Book.findOne({ _id: req.params.id })
-      .then(book => {
-        if (!book) {
-          return res.status(404).json({ error: 'Livre non trouvé' });
-        }
-        // On vérifie que l'utilisateur connecté est bien le propriétaire
-        if (book.userId !== req.auth.userId) {
-          return res.status(403).json({ error: 'Non autorisé' });
-        }
-        // L'utilisateur est le propriétaire, on procède à la mise à jour
-        Book.updateOne({ _id: req.params.id }, { ...req.body, _id: req.params.id })
-          .then(() => res.status(200).json({ message: 'Objet modifié' }))
-          .catch(error => res.status(400).json({ error }));
-      })
-      .catch(error => res.status(500).json({ error }));
+  let bookObject = {};
+
+  if (req.file) {
+    // Si un fichier est envoyé, les données textuelles se trouvent dans req.body.book
+    try {
+      bookObject = req.body.book ? JSON.parse(req.body.book) : {};
+    } catch (error) {
+      return res.status(400).json({ error: 'Mauvais format de données pour "book"' });
+    }
+    // Mise à jour de l'URL de l'image avec le nouveau fichier
+    bookObject.imageUrl = `${req.protocol}://${req.get('host')}/images/${req.file.filename}`;
+  } else {
+    // Si aucun fichier n'est envoyé, on utilise directement le corps de la requête
+    bookObject = { ...req.body };
+  }
+
+  // On retire le champ _userId envoyé par le client, pour éviter toute tentative de modification
+  delete bookObject._userId;
+
+  // On récupère d'abord le livre existant
+  Book.findOne({ _id: req.params.id })
+    .then(book => {
+      if (!book) {
+        return res.status(404).json({ error: 'Livre non trouvé' });
+      }
+      // Vérification que l'utilisateur connecté est bien le propriétaire du livre
+      if (book.userId !== req.auth.userId) {
+        return res.status(403).json({ error: 'Non autorisé' });
+      }
+      // Mise à jour du livre avec les nouvelles données
+      Book.updateOne({ _id: req.params.id }, { ...bookObject, _id: req.params.id })
+        .then(() => res.status(200).json({ message: 'Objet modifié' }))
+        .catch(error => res.status(400).json({ error }));
+    })
+    .catch(error => res.status(500).json({ error }));
 };
 
+
 exports.deleteBook = (req, res, next) => {
-    // Pour la suppression, il est également judicieux de vérifier le propriétaire
-    Book.findOne({ _id: req.params.id })
+  Book.findOne({ _id: req.params.id})
       .then(book => {
-        if (!book) {
-          return res.status(404).json({ error: 'Livre non trouvé' });
-        }
-        if (book.userId !== req.auth.userId) {
-          return res.status(403).json({ error: 'Non autorisé' });
-        }
-        Book.deleteOne({ _id: req.params.id })
-          .then(() => res.status(200).json({ message: 'Objet supprimé' }))
-          .catch(error => res.status(400).json({ error }));
+          if (book.userId != req.auth.userId) {
+              res.status(401).json({message: 'Not authorized'});
+          } else {
+              const filename = book.imageUrl.split('/images/')[1];
+              fs.unlink(`images/${filename}`, () => {
+                  Book.deleteOne({_id: req.params.id})
+                      .then(() => { res.status(200).json({message: 'Objet supprimé !'})})
+                      .catch(error => res.status(401).json({ error }));
+              });
+          }
       })
-      .catch(error => res.status(500).json({ error }));
+      .catch( error => {
+          res.status(500).json({ error });
+      });
 };
 
 exports.getOneBook = (req, res, next) => {
