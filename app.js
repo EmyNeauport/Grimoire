@@ -1,13 +1,9 @@
 const express = require ('express');
 const mongoose = require('mongoose');
-
-const bookRoutes = require('./routes/book');
-const userRoutes = require('./routes/user');
-
 const path = require('path');
+const app = express();
 
 // appeler la constante express pour créer notre application express
-const app = express();
 mongoose.connect('mongodb+srv://neauportemilie:9sa4yJROcygENbUt@cluster0.kgs6a.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0',
     { useNewUrlParser: true,
       useUnifiedTopology: true })
@@ -24,9 +20,12 @@ app.use((req, res, next) => {
     next();
   });
 
-app.use('/api/books', bookRoutes);
-app.use('/api/auth', userRoutes);
-app.use('/images', express.static(path.join(__dirname, 'images' )))
+app.use('/api/books', require('./routes/book'));
+app.use('/api/auth', require('./routes/user'));
+app.use('/images', express.static(path.join(__dirname, 'images'), {
+  maxAge: '30d', // Cache pendant 30 jours
+  etag: false   // Optionnel, selon vos besoins
+}));
 
 // exporter l'application pour que l'on puisse y accéder depuis les autres fichiers de notre projet
 module.exports = app;

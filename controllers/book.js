@@ -1,7 +1,8 @@
+const sharp = require('sharp')
 const Book = require('../models/book');
 const fs = require('fs');
 
-exports.createBook = (req, res, next) => {
+exports.createBook = async (req, res, next) => {
   let bookObject = {};
 
   // Si req.body.thing existe, on le parse, sinon on utilise req.body directement
@@ -25,13 +26,31 @@ exports.createBook = (req, res, next) => {
   bookObject.averageRating = bookObject.averageRating !== undefined ? bookObject.averageRating : 0;
   bookObject.ratings = bookObject.ratings || [];
 
+  // 🔧 Traitement de l'image si un fichier est envoyé
+  if (req.file) {
+    // Assurez-vous que le dossier "images" existe
+    if (!fs.existsSync('./images')) {
+      fs.mkdirSync('./images');
+    }
+    const { buffer, originalname } = req.file;
+    const timestamp = Date.now();
+    // Construire un nom unique et convertir en WebP
+    const fileName = `${timestamp}-${originalname.split(' ').join('_')}.webp`;
+    await sharp(buffer)
+      .webp({ quality: 80 }) // Vous pouvez ajuster la qualité ici
+      .toFile(`./images/${fileName}`);
+    // Définir l'URL de l'image optimisée
+    bookObject.imageUrl = `${req.protocol}://${req.get('host')}/images/${fileName}`;
+  } else {
+    // Sinon, conserver l'URL éventuellement fournie
+    bookObject.imageUrl = bookObject.imageUrl;
+  }
+
   // On crée le livre en utilisant le fichier uploadé pour l'image s'il existe
   const book = new Book({
     ...bookObject,
     userId: req.auth.userId,
-    imageUrl: req.file 
-      ? `${req.protocol}://${req.get('host')}/images/${req.file.filename}` 
-      : bookObject.imageUrl // ou une valeur par défaut si l'image est obligatoire
+    imageUrl: bookObject.imageUrl
   });
 
   book.save()
@@ -40,7 +59,7 @@ exports.createBook = (req, res, next) => {
 };
 
 
-exports.modifyBook = (req, res, next) => {
+exports.modifyBook = async (req, res, next) => {
   let bookObject = {};
 
   if (req.file) {
@@ -50,32 +69,40 @@ exports.modifyBook = (req, res, next) => {
     } catch (error) {
       return res.status(400).json({ error: 'Mauvais format de données pour "book"' });
     }
-    // Mise à jour de l'URL de l'image avec le nouveau fichier
-    bookObject.imageUrl = `${req.protocol}://${req.get('host')}/images/${req.file.filename}`;
+    // Assurez-vous que le dossier "images" existe
+    if (!fs.existsSync('./images')) {
+      fs.mkdirSync('./images');
+    }
+    const { buffer, originalname } = req.file;
+    const timestamp = Date.now();
+    // Construire un nom unique et convertir en WebP avec Sharp
+    const fileName = `${timestamp}-${originalname.split(' ').join('_')}.webp`;
+    await sharp(buffer)
+      .webp({ quality: 20 })
+      .toFile(`./images/${fileName}`);
+    // Définir l'URL de l'image optimisée
+    bookObject.imageUrl = `${req.protocol}://${req.get('host')}/images/${fileName}`;
   } else {
-    // Si aucun fichier n'est envoyé, on utilise directement le corps de la requête
+    // Sinon, utiliser directement le corps de la requête
     bookObject = { ...req.body };
   }
 
-  // On retire le champ _userId envoyé par le client, pour éviter toute tentative de modification
+  // Supprimer le champ _userId pour éviter toute modification non autorisée
   delete bookObject._userId;
 
-  // On récupère d'abord le livre existant
-  Book.findOne({ _id: req.params.id })
-    .then(book => {
-      if (!book) {
-        return res.status(404).json({ error: 'Livre non trouvé' });
-      }
-      // Vérification que l'utilisateur connecté est bien le propriétaire du livre
-      if (book.userId !== req.auth.userId) {
-        return res.status(403).json({ error: 'Non autorisé' });
-      }
-      // Mise à jour du livre avec les nouvelles données
-      Book.updateOne({ _id: req.params.id }, { ...bookObject, _id: req.params.id })
-        .then(() => res.status(200).json({ message: 'Objet modifié' }))
-        .catch(error => res.status(400).json({ error }));
-    })
-    .catch(error => res.status(500).json({ error }));
+  try {
+    const book = await Book.findOne({ _id: req.params.id });
+    if (!book) {
+      return res.status(404).json({ error: 'Livre non trouvé' });
+    }
+    if (book.userId !== req.auth.userId) {
+      return res.status(403).json({ error: 'Non autorisé' });
+    }
+    await Book.updateOne({ _id: req.params.id }, { ...bookObject, _id: req.params.id });
+    res.status(200).json({ message: 'Objet modifié' });
+  } catch (error) {
+    res.status(500).json({ error });
+  }
 };
 
 
@@ -109,4 +136,49 @@ exports.getAllBooks = (req, res, next) => {
     Book.find()
       .then(books => res.status(200).json(books))
       .catch(error => res.status(400).json({ error }));
+};
+
+exports.rateBook = async (req, res, next) => {
+  try {
+    // Récupération de la note envoyée dans le corps de la requête
+    const { rating } = req.body;
+    // Vérifiez que la note est bien un nombre entre 0 et 5
+    if (rating === undefined || typeof rating !== 'number' || rating < 0 || rating > 5) {
+      return res.status(400).json({ error: "La note doit être un nombre entre 0 et 5." });
+    }
+
+    // Récupérez le livre à noter en utilisant l'ID passé dans l'URL
+    const book = await Book.findOne({ _id: req.params.id });
+    if (!book) {
+      return res.status(404).json({ error: "Livre non trouvé." });
+    }
+
+    const userId = req.auth.userId;
+    // Vérifiez que l'utilisateur n'a pas déjà noté ce livre
+    const alreadyRated = book.ratings.some(r => r.userId === userId);
+    if (alreadyRated) {
+      return res.status(400).json({ error: "Vous avez déjà noté ce livre." });
+    }
+
+    // Ajoutez la nouvelle note dans le tableau "ratings"
+    book.ratings.push({ userId, grade: rating });
+
+    // Mettez à jour la note moyenne
+    const sum = book.ratings.reduce((acc, curr) => acc + curr.grade, 0);
+    book.averageRating = sum / book.ratings.length;
+
+    // Sauvegardez le livre mis à jour et renvoyez-le dans la réponse
+    const updatedBook = await book.save();
+    res.status(200).json(updatedBook);
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+};
+
+exports.getBestRatedBooks = (req, res, next) => {
+  Book.find()  
+    .sort({ averageRating: -1 }) // Trie par note moyenne décroissante
+    .limit(3)                   // Limite le résultat aux 3 premiers livres
+    .then(books => res.status(200).json(books))
+    .catch(error => res.status(400).json({ error }));
 };
