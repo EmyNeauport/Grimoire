@@ -17,7 +17,7 @@ const processImage = async (req, res, next) => {
         // générer un nom unique pour l'image
         const timestamp = Date.now();
         const fileName = `${timestamp}-${req.file.originalname.split(' ').join('_')}.webp`
-        //convertir et optimiser l'image avec Sharp
+        //convertir et optimiser l'image avec sharp
         await sharp(req.file.buffer)
             .resize(200, 250, { fit: 'inside' }) //redimensionnement
             .webp({ quality: 90 }) //compression

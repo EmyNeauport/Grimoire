@@ -82,7 +82,7 @@ exports.modify = async (req, res, next) => {
   }
 }
 
-//fonction qui permet de gérer la route DELETE de l'objet BOOK
+//FONCTION QUI PERMET DE GERER LA ROUTE DELETE DE L'OBJET BOOK
 exports.delete = (req, res, next) => {
   Book.findOne({ _id: req.params.id})
       .then(book => {
@@ -102,14 +102,14 @@ exports.delete = (req, res, next) => {
       })
 }
 
-//fonction qui permet de gérer la route GET (one) de l'objet BOOK
+//FONCTION QUI PERMET DE GERER LA ROUTE GET (one) DE L'OBJET BOOK
 exports.getOne = (req, res, next) => {
     Book.findOne({ _id: req.params.id })
       .then(book => res.status(200).json(book))
       .catch(error => res.status(404).json({ error }))
 }
 
-//fonction qui permet de gérer la route GET (all) de l'objet BOOK
+//FONCTION QUI PERMET DE GERER LA ROUTE GET (all) DE L'OBJET BOOK
 exports.getAll = (req, res, next) => {
     // Retourne la liste complète des livres en BDD
     Book.find()
@@ -117,6 +117,7 @@ exports.getAll = (req, res, next) => {
       .catch(error => res.status(400).json({ error }))
 }
 
+//FONCTION QUI PERMET DE GERER LA ROUTE RATE DE L'OBJET BOOK
 exports.rate = async (req, res, next) => {
   try {
     //récupérer la note envoyée dans le corps de la requête
@@ -154,6 +155,7 @@ exports.rate = async (req, res, next) => {
   }
 }
 
+//FONCTION QUI PERMET DE GERER LA ROUTE GETBESTRATED 
 exports.getBestRated = (req, res, next) => {
   Book.find()  
     .sort({ averageRating: -1 }) //trie par note moyenne décroissante
