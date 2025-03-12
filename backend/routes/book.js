@@ -1,18 +1,19 @@
-//contient la logique de routing
-const express = require('express');
+//CONTIENT LA LOGIQUE DE ROUTING
 
 //créer un router express
-const router = express.Router();
-const auth = require('../middleware/auth');
-const multer = require('../images/multer-config');
+const express = require('express')
+const router = express.Router()
+const auth = require('../middleware/auth')
+const { upload, processImage } = require('../middleware/multer-config')
 const bookCtrl = require('../controllers/book')
 
-router.post('/', auth, multer, bookCtrl.createBook);
-router.put('/:id', auth, multer, bookCtrl.modifyBook);
-router.delete('/:id', auth, bookCtrl.deleteBook);
-router.get('/bestrating', bookCtrl.getBestRatedBooks);
-router.get('/:id', bookCtrl.getOneBook);
-router.get('/', bookCtrl.getAllBooks);
-router.post('/:id/rating', auth, bookCtrl.rateBook);
+router.post('/', auth, upload, processImage, bookCtrl.create)
+router.put('/:id', auth, upload, processImage, bookCtrl.modify)
+router.delete('/:id', auth, bookCtrl.delete)
+router.get('/bestrating', bookCtrl.getBestRated)
+router.get('/:id', bookCtrl.getOne)
+router.get('/', bookCtrl.getAll)
+router.post('/:id/rating', auth, bookCtrl.rate)
 
-module.exports = router;
+//exporter le router
+module.exports = router
